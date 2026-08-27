@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createEntry, listEntries } from "@/lib/entries";
-import type { NewEntry } from "@/lib/entry-types";
+import {
+  MAX_HOURS_PER_ENTRY,
+  normalizeHours,
+  normalizeWorkDate,
+  type NewEntry,
+} from "@/lib/entry-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +24,20 @@ export async function POST(request: Request) {
 
   if (!body?.title || !body.title.trim()) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
+  }
+
+  if (normalizeHours(body.hours) === null) {
+    return NextResponse.json(
+      { error: `hours must be a number between 0 and ${MAX_HOURS_PER_ENTRY}` },
+      { status: 400 },
+    );
+  }
+
+  if (normalizeWorkDate(body.work_date) === null) {
+    return NextResponse.json(
+      { error: "work_date must be a YYYY-MM-DD date" },
+      { status: 400 },
+    );
   }
 
   const entry = createEntry(body);
