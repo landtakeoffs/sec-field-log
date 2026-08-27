@@ -52,6 +52,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dropboxConfigured, setDropboxConfigured] = useState(false);
+  const [dropboxFolder, setDropboxFolder] = useState("/SEC Field Log/Weekly Hours");
+  const [savingToDropbox, setSavingToDropbox] = useState(false);
+  const [dropboxMessage, setDropboxMessage] = useState<string | null>(null);
 
   const today = useLocalToday();
   // Both default to today until the user picks something else.
@@ -81,6 +85,18 @@ export default function Home() {
         if (active) setEntries(data.entries ?? []);
       } catch {
         if (active) setError("Failed to load entries");
+      }
+      try {
+        const dropbox = await fetch("/api/timesheet/dropbox");
+        if (active && dropbox.ok) {
+          const status = await dropbox.json();
+          setDropboxConfigured(Boolean(status.configured));
+          if (typeof status.folder === "string" && status.folder) {
+            setDropboxFolder(status.folder);
+          }
+        }
+      } catch {
+        // Dropbox status is optional; the CSV download still works without it.
       } finally {
         if (active) setLoading(false);
       }
@@ -104,6 +120,26 @@ export default function Home() {
   }, [entries, week]);
 
   const weekTotals = useMemo(() => totalsByWorker(weekEntries), [weekEntries]);
+
+  async function saveWeekToDropbox() {
+    if (!week) return;
+    setDropboxMessage(null);
+    setSavingToDropbox(true);
+    try {
+      const res = await fetch(`/api/timesheet?week=${week.start}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to save spreadsheet to Dropbox");
+      }
+      setDropboxMessage(`Saved to Dropbox: ${data.path ?? dropboxFolder}`);
+    } catch (err) {
+      setDropboxMessage(
+        err instanceof Error ? err.message : "Failed to save spreadsheet to Dropbox",
+      );
+    } finally {
+      setSavingToDropbox(false);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -350,13 +386,33 @@ export default function Home() {
           </ul>
         )}
 
-        <a
-          href={week ? `/api/timesheet?week=${week.start}` : undefined}
-          aria-disabled={!week}
-          className="mt-5 inline-block rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium transition hover:bg-neutral-100 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Download spreadsheet (CSV)
-        </a>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <a
+            href={week ? `/api/timesheet?week=${week.start}` : undefined}
+            aria-disabled={!week}
+            className="inline-block rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium transition hover:bg-neutral-100 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Download spreadsheet (CSV)
+          </a>
+          <button
+            type="button"
+            onClick={saveWeekToDropbox}
+            disabled={!week || savingToDropbox}
+            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          >
+            {savingToDropbox ? "Saving to Dropbox…" : "Save to Dropbox"}
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-neutral-500">
+          {dropboxConfigured
+            ? `Office copy lives in Dropbox at ${dropboxFolder}. Saving overwrites this week's file.`
+            : `Dropbox is not connected yet. The office can still download the CSV, or add DROPBOX_ACCESS_TOKEN to send it to ${dropboxFolder}.`}
+        </p>
+        {dropboxMessage && (
+          <p role="status" className="mt-2 text-sm">
+            {dropboxMessage}
+          </p>
+        )}
       </section>
 
       <section>
