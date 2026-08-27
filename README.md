@@ -1,85 +1,28 @@
-# sec-field-log
+# SEC Field Tool
 
-Security Field Log — a small [Next.js](https://nextjs.org) app for logging
-field hours and observations. Each entry records who worked, the date worked,
-hours, plus the observation itself (title, location, severity, notes), and is
-persisted to a local SQLite database via
-[`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3).
+Mobile field app for SEC Construction. Crew logs machine hours and weekly
+equipment inspections; every submission saves to Postgres and appends to a
+shared Google Sheet the office can watch live.
 
-## Weekly hours spreadsheet
+## Architecture
 
-The home page shows the selected week's total hours with a per-worker
-breakdown. **Download spreadsheet (CSV)** saves that week as a CSV file
-that opens directly in Excel, Numbers, or Google Sheets. **Save to Dropbox**
-overwrites the same week's file in `/SEC Field Log/Weekly Hours` (or
-`DROPBOX_FOLDER` if set) so office staff can open it from the shared folder.
+- **Frontend** – recovered branded PWA (Vite build) served as static from repo root.
+- **Backend** – Vercel serverless functions in `/api`.
+  - `POST /api/submissions` – field crew submits hours + inspections.
+  - `GET  /api/submissions?week=YYYY-MM-DD` – office review (gated by `x-office-pin`).
+  - `GET  /api/status` – non-secret config flags.
+- **Storage** – Postgres (`submissions` table, auto-created on first write).
+- **Live sheet** – Google Sheets service-account append on every save.
 
-Set `DROPBOX_ACCESS_TOKEN` (a Dropbox app token with `files.content.write`)
-on the server. Without it the download still works, and Save to Dropbox
-returns a clear "not configured" error.
+## Required Vercel env vars
 
-Weeks run Monday to Sunday. The same export is available directly:
+| Key | Purpose |
+|---|---|
+| `DATABASE_URL` or `POSTGRES_URL` | Postgres connection string |
+| `OFFICE_PIN` | Header value office must send to read submissions (`x-office-pin`) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service-account credential JSON (paste whole file) |
+| `GOOGLE_SHEET_ID` | Target sheet ID from its URL |
+| `GOOGLE_SHEET_HOURS_TAB` | Optional, defaults to `Hours` |
+| `GOOGLE_SHEET_INSPECTIONS_TAB` | Optional, defaults to `Inspections` |
 
-```bash
-# The week containing a given date (defaults to the current week)
-curl -OJ 'http://localhost:3000/api/timesheet?week=2026-08-27'
-
-# An explicit date range
-curl -OJ 'http://localhost:3000/api/timesheet?start=2026-08-01&end=2026-08-31'
-```
-
-Work dates are plain calendar dates, so a week's boundaries are the same
-regardless of the timezone the office or the field crew is in.
-
-## Where the data lives
-
-| Environment | Storage | Set up |
-| --- | --- | --- |
-| Local dev | SQLite file at `data/field-log.db` | nothing to do |
-| Deployed (Vercel) | Postgres | set `POSTGRES_URL` (or `DATABASE_URL`) |
-
-Vercel's filesystem is read-only, so a deployed app **must** have
-`POSTGRES_URL` set or hours cannot be saved. Any Postgres works (Neon,
-Supabase, RDS); the table is created automatically on first use. Check which
-backend a running deployment picked with `GET /api/health`:
-
-```bash
-curl https://<your-app>/api/health
-# {"storage":"postgres","persistent":true,...}
-```
-
-## Getting started
-
-```bash
-npm install        # install dependencies (compiles the native SQLite module)
-npm run dev        # start the dev server on http://localhost:3000
-```
-
-Then open [http://localhost:3000](http://localhost:3000) and add a field log
-entry.
-
-## Scripts
-
-| Command         | Description                                  |
-| --------------- | -------------------------------------------- |
-| `npm run dev`   | Start the development server (port 3000).    |
-| `npm run build` | Create a production build.                   |
-| `npm run start` | Run the production server.                   |
-| `npm run lint`  | Run ESLint.                                  |
-
-## Project layout
-
-- `src/app/page.tsx` — the field log UI (form, weekly hours, list).
-- `src/app/api/entries/route.ts` — `GET`/`POST` API for entries.
-- `src/app/api/timesheet/route.ts` — weekly hours CSV export and Dropbox save.
-- `src/app/api/timesheet/dropbox/route.ts` — whether Dropbox is configured.
-- `src/app/api/health/route.ts` — which database and Dropbox state.
-- `src/app/manifest.ts`, `src/app/icon.tsx`, `src/app/apple-icon.tsx` — Home Screen install.
-- `src/lib/entries.ts` — storage-agnostic entry access.
-- `src/lib/entry-store.ts` — storage interface and backend selection.
-- `src/lib/store-postgres.ts` / `src/lib/store-sqlite.ts` — the two backends.
-- `src/lib/dates.ts` — calendar-date and week arithmetic.
-- `src/lib/timesheet.ts` — hours totals and CSV generation.
-- `src/lib/dropbox.ts` — Dropbox upload helper.
-
-The SQLite file lives at `data/field-log.db` and is gitignored.
+Share the sheet with the service-account email (`client_email`) as **Editor**.
