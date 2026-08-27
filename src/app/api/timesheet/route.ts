@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const csv = buildTimesheetCsv(listEntriesInRange(parsed.range.start, parsed.range.end));
+  const csv = buildTimesheetCsv(
+    await listEntriesInRange(parsed.range.start, parsed.range.end),
+  );
 
   return new Response(csv, {
     headers: {
@@ -49,7 +51,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const csv = buildTimesheetCsv(listEntriesInRange(parsed.range.start, parsed.range.end));
+  const csv = buildTimesheetCsv(
+    await listEntriesInRange(parsed.range.start, parsed.range.end),
+  );
 
   try {
     const uploaded = await uploadTimesheetToDropbox(csv, parsed.range);

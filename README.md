@@ -31,6 +31,23 @@ curl -OJ 'http://localhost:3000/api/timesheet?start=2026-08-01&end=2026-08-31'
 Work dates are plain calendar dates, so a week's boundaries are the same
 regardless of the timezone the office or the field crew is in.
 
+## Where the data lives
+
+| Environment | Storage | Set up |
+| --- | --- | --- |
+| Local dev | SQLite file at `data/field-log.db` | nothing to do |
+| Deployed (Vercel) | Postgres | set `POSTGRES_URL` (or `DATABASE_URL`) |
+
+Vercel's filesystem is read-only, so a deployed app **must** have
+`POSTGRES_URL` set or hours cannot be saved. Any Postgres works (Neon,
+Supabase, RDS); the table is created automatically on first use. Check which
+backend a running deployment picked with `GET /api/health`:
+
+```bash
+curl https://<your-app>/api/health
+# {"storage":"postgres","persistent":true,...}
+```
+
 ## Getting started
 
 ```bash
@@ -56,8 +73,11 @@ entry.
 - `src/app/api/entries/route.ts` — `GET`/`POST` API for entries.
 - `src/app/api/timesheet/route.ts` — weekly hours CSV export and Dropbox save.
 - `src/app/api/timesheet/dropbox/route.ts` — whether Dropbox is configured.
-- `src/lib/db.ts` — SQLite connection, schema, and migrations.
-- `src/lib/entries.ts` — entry data access helpers.
+- `src/app/api/health/route.ts` — which database and Dropbox state.
+- `src/app/manifest.ts`, `src/app/icon.tsx`, `src/app/apple-icon.tsx` — Home Screen install.
+- `src/lib/entries.ts` — storage-agnostic entry access.
+- `src/lib/entry-store.ts` — storage interface and backend selection.
+- `src/lib/store-postgres.ts` / `src/lib/store-sqlite.ts` — the two backends.
 - `src/lib/dates.ts` — calendar-date and week arithmetic.
 - `src/lib/timesheet.ts` — hours totals and CSV generation.
 - `src/lib/dropbox.ts` — Dropbox upload helper.

@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ entries: listEntries() });
+  return NextResponse.json({ entries: await listEntries() });
 }
 
 export async function POST(request: Request) {
@@ -40,6 +40,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const entry = createEntry(body);
+  const entry = await createEntry(body);
   return NextResponse.json({ entry }, { status: 201 });
 }
