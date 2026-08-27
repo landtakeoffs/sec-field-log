@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Security Field Log",
-  description: "Record and review field observations and incidents.",
+  description: "Log field hours and observations, and export the week for the office.",
+  appleWebApp: { capable: true, title: "Field Log", statusBarStyle: "default" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
