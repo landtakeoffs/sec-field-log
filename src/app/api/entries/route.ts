@@ -6,6 +6,7 @@ import {
   normalizeWorkDate,
   type NewEntry,
 } from "@/lib/entry-types";
+import { appendEntryToSheet, sheetsConfigured } from "@/lib/sheets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,5 +42,23 @@ export async function POST(request: Request) {
   }
 
   const entry = await createEntry(body);
-  return NextResponse.json({ entry }, { status: 201 });
+
+  // Best-effort mirror to Google Sheets. If the sheet append fails we still
+  // return 201 so the crew never sees an error for a saved entry — the row
+  // will show up next time the admin runs a manual export from Postgres.
+  let sheet: { synced: boolean; error?: string } = { synced: false };
+  if (sheetsConfigured()) {
+    try {
+      await appendEntryToSheet(entry);
+      sheet = { synced: true };
+    } catch (err) {
+      sheet = {
+        synced: false,
+        error: err instanceof Error ? err.message : "Sheet sync failed",
+      };
+      console.error("Sheet append failed:", err);
+    }
+  }
+
+  return NextResponse.json({ entry, sheet }, { status: 201 });
 }

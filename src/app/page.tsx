@@ -52,10 +52,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dropboxConfigured, setDropboxConfigured] = useState(false);
-  const [dropboxFolder, setDropboxFolder] = useState("/SEC Field Log/Weekly Hours");
-  const [savingToDropbox, setSavingToDropbox] = useState(false);
-  const [dropboxMessage, setDropboxMessage] = useState<string | null>(null);
+  const [sheetLink, setSheetLink] = useState<string | null>(null);
+  const [sheetConfigured, setSheetConfigured] = useState(false);
+  const [emailConfigured, setEmailConfigured] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const today = useLocalToday();
   // Both default to today until the user picks something else.
@@ -87,16 +88,15 @@ export default function Home() {
         if (active) setError("Failed to load entries");
       }
       try {
-        const dropbox = await fetch("/api/timesheet/dropbox");
-        if (active && dropbox.ok) {
-          const status = await dropbox.json();
-          setDropboxConfigured(Boolean(status.configured));
-          if (typeof status.folder === "string" && status.folder) {
-            setDropboxFolder(status.folder);
-          }
+        const statusRes = await fetch("/api/status");
+        if (active && statusRes.ok) {
+          const status = await statusRes.json();
+          setSheetConfigured(Boolean(status?.sheet?.configured));
+          setSheetLink(typeof status?.sheet?.link === "string" ? status.sheet.link : null);
+          setEmailConfigured(Boolean(status?.email?.configured));
         }
       } catch {
-        // Dropbox status is optional; the CSV download still works without it.
+        // Status is optional; the CSV download still works without it.
       } finally {
         if (active) setLoading(false);
       }
@@ -121,23 +121,23 @@ export default function Home() {
 
   const weekTotals = useMemo(() => totalsByWorker(weekEntries), [weekEntries]);
 
-  async function saveWeekToDropbox() {
+  async function emailWeekNow() {
     if (!week) return;
-    setDropboxMessage(null);
-    setSavingToDropbox(true);
+    setStatusMessage(null);
+    setSendingEmail(true);
     try {
-      const res = await fetch(`/api/timesheet?week=${week.start}`, { method: "POST" });
+      const res = await fetch(`/api/timesheet/email?week=${week.start}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error ?? "Failed to save spreadsheet to Dropbox");
+        throw new Error(data.error ?? "Failed to send weekly email");
       }
-      setDropboxMessage(`Saved to Dropbox: ${data.path ?? dropboxFolder}`);
+      setStatusMessage(`Emailed the admin (${data.entries ?? 0} entries).`);
     } catch (err) {
-      setDropboxMessage(
-        err instanceof Error ? err.message : "Failed to save spreadsheet to Dropbox",
+      setStatusMessage(
+        err instanceof Error ? err.message : "Failed to send weekly email",
       );
     } finally {
-      setSavingToDropbox(false);
+      setSendingEmail(false);
     }
   }
 
@@ -394,23 +394,33 @@ export default function Home() {
           >
             Download spreadsheet (CSV)
           </a>
+          {sheetLink && (
+            <a
+              href={sheetLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium transition hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Open live sheet
+            </a>
+          )}
           <button
             type="button"
-            onClick={saveWeekToDropbox}
-            disabled={!week || savingToDropbox}
+            onClick={emailWeekNow}
+            disabled={!week || sendingEmail || !emailConfigured}
             className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            {savingToDropbox ? "Saving to Dropbox…" : "Save to Dropbox"}
+            {sendingEmail ? "Emailing…" : "Email admin now"}
           </button>
         </div>
         <p className="mt-2 text-sm text-neutral-500">
-          {dropboxConfigured
-            ? `Office copy lives in Dropbox at ${dropboxFolder}. Saving overwrites this week's file.`
-            : `Dropbox is not connected yet. The office can still download the CSV, or add DROPBOX_ACCESS_TOKEN to send it to ${dropboxFolder}.`}
+          {sheetConfigured
+            ? `Every entry is added to the live Google Sheet as it's saved.${emailConfigured ? " The admin gets an emailed summary every Friday afternoon." : ""}`
+            : "Sheet sync isn't configured yet. Entries are still saved and available as CSV."}
         </p>
-        {dropboxMessage && (
+        {statusMessage && (
           <p role="status" className="mt-2 text-sm">
-            {dropboxMessage}
+            {statusMessage}
           </p>
         )}
       </section>
